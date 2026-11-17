@@ -1,0 +1,230 @@
+I am a radar expert, preparing a software tool in python that can be used to predict HF surface wave radar (HFSWR) performance.
+
+Produce a GUl-absed tool that allows a user to generate range plots of frequencies in 1 MHz steps between 5 MHz and 30 MHz
+
+Assumptions:
+
+Using the standard radar equiation with appropriate ITU CCIR modifications for this specific application
+
+The radar is located within 500 metres of the
+
+shoreline, looking out to sea
+
+Transmit power is 10 kW
+
+The transmit and receive antennas are assumed to ve colocated half-wave dipoles on an ideal ground plane
+
+Targets have a cross sectional area of 1 square metre and are at an altitiude of 50 metres THe radar is located at Lands End, looking due south
+
+Output format:
+
+A stack of three charts for diurnal, annual, and sunspot variability
+
+Each chart will have range on the y-axis and a series of lines for each frequency in the 1 MHz steps. The x-axis will either be 24 hours, month
+
+or sunspot count
+
+I’ll build this as a self-contained Python/Tkinter tool: ground-wave propagation per ITU-R P.368 (spherical-earth residue series, with a Millington land–sea correction), external noise per ITU-R P.372, and the result fed into the radar equation. First I’ll check what ITU reference data I can get hold of.
+
+Ran 42 commands, updated tasks, created 4 files
+
+I’ve built the tool and checked its physics against the ITU’s own reference code; hfswr_tool.zip contains it. With your stated assumptions, predicted detection ranges are short, about 13–42 km across 5–30 MHz. The figure is dominated by two parameters you may want to revisit: the land between radar and sea, and the integration time.
+
+What’s in the package
+hfswr_gui.py: the Tkinter GUI. All parameters are editable, and it produces the three stacked charts (range against UTC hour, month and sunspot number), one line per frequency. It can save PNG and CSV, shows values when you hover, and has a --headless mode.
+hfswr_model.py: the physics.
+Ground wave (ITU-R P.368): spherical-earth residue series plus Norton flat-earth, exact height-gain at 50 m, and Millington’s method for a mixed land–sea path.
+Noise (ITU-R P.372): atmospheric, man-made and galactic noise. Galactic noise is screened by foF2 from the ITU-R P.1239 ionospheric maps.
+site_lands_end.json, plus build_site_data.py to regenerate the site data for any other location.
+Validation (high confidence)
+Check	Agreement
+Field strength vs GRWAVE over sea, 5–30 MHz, 25–600 km	≤ 0.3 dB
+Atmospheric and combined noise vs ITU P372 C code, all months, hours and frequencies	< 0.001 dB
+
+The ITU data and code come from the ITU-R Study Group 3 HF repository, which the ITU releases free of copyright assertions. GRWAVE was compiled from the space-physics/grwave wrapper.
+
+Defaults I chose and which ones matter
+Parameter	Default	Effect
+Land between radar and shore	0.5 km of medium dry ground	8–19 dB loss each way. This roughly halves the range.
+Integration time	10 s	Range scales with integration time to the power ¼ before the ground-wave roll-off.
+Man-made noise	Rural (conservative)	Quiet rural adds 10–70 % range, mostly below 15 MHz.
+Antenna gain	5.16 dBi	Taken as a λ/4 monopole, the usual reading of a “half-wave dipole on a ground plane”.
+Required SNR, losses, receiver noise figure	13 dB, 6 dB, 10 dB	
+
+Sensitivity at SSN 100, ranges in km for 5 / 10 / 20 / 30 MHz:
+
+Case	January 1200 UTC
+Your brief	42 / 29 / 18 / 13
+Radar on the shoreline (all-sea path)	76 / 61 / 41 / 29
+Shoreline and quiet rural noise	130 / 74 / 47 / 35
+Pushback and caveats
+The sunspot chart will look almost flat, and that is correct for this model. Within P.368 and P.372, the solar cycle only changes galactic-noise screening. In reality the solar-cycle effects on HFSWR come from ionospheric self-clutter and sky-wave interference, and the ITU framework does not model those. Medium confidence that this matters operationally.
+A constant 1 m² radar cross-section understates real air targets at HF, where resonance makes the cross-section rise steeply with frequency.
+Sea-roughness (Barrick) losses are not included. They will reduce ranges further above about 15 MHz in rough seas.
+Options and next steps
+Siting study: run the tool with the land section length at 0–0.5 km to quantify how much it pays to put the antennas at the shoreline. This needs no code changes.
+Add Barrick sea-state loss as a selectable term: moderate effort, and the biggest missing physics.
+Add frequency-dependent cross-section and array gain to move from a “standard target” check to a mission-level prediction.
+
+Can you confirm what integration time and required SNR you intend (air or surface mode)? I’d then re-run the reference plots with those values.
+
+Add the effects of skywave interference, Bragg lines and sea clutter at selectable sea states from 0 to 7. Also include option for alternate display format across all three plot areas which shows probability of detection vs range at a single, selectable frequency, rather than maximum continuous detection range.
+
+Read 6 pages, updated tasks, searched the web
+
+Now sanity-checking the new physics against known benchmarks (saturated Bragg ≈ −17 dB upwind, Bragg Doppler, required SNR):
+
+Ran 8 commands, updated tasks, read 4 files
+
+hfswr_tool_v2.zip adds sea clutter (Bragg lines plus second-order continuum, sea states 0–7), skywave interference, ionospheric self-clutter, and a selectable Pd display. With your brief’s single receive dipole, the radar is now clutter-limited at sea state 3 and above: detection range for a 1 m² target falls to about 9–16 km. That is a real consequence of the configuration, not a bug.
+
+What’s new
+
+Detection is now based on Pd. Every range or Pd value comes from signal-to-interference-plus-noise (SINR) after integration. The interference term is noise, skywave interference, sea clutter and ionospheric clutter. You set the required Pd, the Pfa, and Swerling 0 or 1. The defaults (Pd 0.9, Pfa 10⁻⁶) need 13.2 dB.
+
+Sea clutter (Sea clutter tab):
+
+Sea model: a fully developed Pierson–Moskowitz sea, with wave height taken from the WMO sea-state code. Wind direction is selectable.
+First-order Bragg lines: Barrick’s standard expression, which reproduces the textbook saturated level of about −17 dB upwind. The lines weaken properly at low sea state and low frequency.
+Second-order continuum: scaled to the first-order lines by sea state and frequency.
+Clutter cell: range × beamwidth × range resolution. A Doppler dynamic-range floor (default −85 dB) leaks clutter into every Doppler bin.
+
+Skywave effects (Skywave tab):
+
+External interference is added when the frequency is below the 3000 km MUF, using ITU ionospheric maps for the site. Daytime D-layer absorption reduces it. The examples show this halving night-time range at 5 MHz.
+Ionospheric self-clutter appears when the frequency is below foF2. It blanks ranges from about the F2 peak height (roughly 280–380 km) outwards. I checked this with a high-power case: 5 MHz detection was cut from 396 km to 320 km.
+
+Display formats (Display tab, or --mode when running headless):
+
+Mode	Shows
+range	Maximum continuous detection range, all frequencies (as before)
+pdmap	Pd over range against hour, month or SSN at one frequency, with a Pd-required contour
+pdcurves	Pd against range at one frequency, one curve per time or SSN step
+Confidence
+Component	Confidence	Basis
+First-order Bragg level and Doppler	High	Barrick theory; matches the published −17 dB saturation
+Second-order continuum shape and level	Medium-low	Parametric fit of energy and width, not Barrick’s full second-order integral
+Skywave interference	Low (by design)	The +10 dB excess is a placeholder for spectrum-survey data
+Ionospheric self-clutter	Medium	Geometry and foF2 are sound; the level depends on the antenna’s gain towards the zenith (default −15 dB)
+Pushback and points to check
+The single element is the binding constraint. A 180° beam gathers about 65 dBsm of sea echo per range cell. Even 85 dB of Doppler dynamic range leaves a 1 m² target marginal. Narrowing the beam to 10–15° (a receive array) roughly multiplies the range by 5–8.
+Target speed matters a lot. I defaulted the target to 50 m/s radial, which keeps it clear of the sea echo in Doppler. At 10 m/s, sea state 3 and above gives zero detections even with a 15° beam and 60 s integration, because the target sits in the second-order continuum.
+Roughness propagation loss is still missing. This is Barrick’s effective-impedance loss, separate from clutter. I couldn’t find a verified source for the integral kernel, so I left it out rather than guess. It will reduce ranges further above about 15 MHz in higher sea states.
+Options for next steps
+Full Barrick second-order integral. This gives the highest fidelity for slow targets but is a substantial build. The parametric model is probably adequate for fast targets.
+Barrick roughness loss. This is the biggest remaining gap at high frequency and high sea state. It needs his 1971 paper (Radio Science, Part 1) for the integral kernel; if you can obtain it, I’ll implement it and check it against the ITU handbook’s 10 MHz curves.
+Calibrate the skywave parameters against any spectrum-occupancy or ionosonde data you hold for the South West, such as the Chilton ionosonde.
+
+What receive array (beamwidth) and target speed class should the default reference plots use?
+
+Sources: ITU-R Handbook on Ground Wave Propagation (2014), Grosdidier et al., HFSW radar model (RADAR09), Barrick 1998, IEEE TAP, Kirincich & Emery 2023
+
+Add an additional plot of detection range vs target radial speed, and range checking for input data
+
+I’ll add a fourth chart, detection range against target radial speed, available in all three display modes. I’ll also add range checking on every input: hard limits that block the run, warnings where the model’s validity is stretched, and invalid fields highlighted in the GUI.
+
+Ran 18 commands, updated tasks, read 5 files
+
+Waiting on the Tk-enabled Python environment so I can run an automated GUI test (bad inputs blocked and highlighted, warnings shown, a full Pd-map compute) under a virtual display before packaging v3.
+
+Ran a command
+
+GUI test passed: bad inputs are blocked and highlighted, warnings prompt, and a full computation renders four charts. Packaging now.
+
+Updated tasks, ran a command, shared files
+
+hfswr_tool_v3.zip adds a fourth chart, detection range against target radial speed, plus range checking on every input. Both work in all three display modes and in headless runs. I ran an automated GUI test on a virtual display: bad inputs are blocked and highlighted, and a full calculation renders all four charts.
+
+Radial-speed chart
+What it plots: the radial speed sweeps from 0 to 60 m/s in 0.25 m/s steps by default; negative speeds mean the target is opening. The sweep limits are on the Display tab and can also be set with --vmin/--vmax/--vstep. The month, hour and SSN are the same as the other charts use.
+Bragg markers: in range mode the chart shades the first-order Bragg speeds, 2.8–6.8 m/s across 5–30 MHz. In the Pd modes it draws dotted lines at the Bragg speed for the selected frequency.
+What it shows (medium confidence): with your single-element defaults at sea state 3, a 1 m² target needs roughly 16 m/s at 30 MHz and 32 m/s at 5 MHz to clear the sea echo. Lower frequencies need more speed because each m/s gives less Doppler shift.
+Wind direction matters: with a south-westerly wind, opening targets do better than closing ones. The Bragg line from closing waves is the stronger one.
+Reading a zero: a value of 0 km means the target isn’t detected even at the 5 km minimum range. The chart therefore jumps from 0 straight to about 5 km.
+Input checking
+Level	Behaviour
+Parse errors	Text that isn’t a number, or a badly formed frequency list: the field turns red and the run is blocked
+Hard limits	Every field has a minimum and maximum (table in the README; LIMITS in the model). Offending fields turn red and the GUI jumps to their tab
+Consistency	Maximum range above minimum, land section shorter than the minimum range, speed sweep maximum above minimum, limits on the number of points
+Warnings (amber)	You can proceed. Covers: altitude above 1 km, SSN above 160 (foF2 saturates), clutter beyond the validity of the perturbation theory, integration time above 300 s, and a slow target with clutter switched off
+
+Headless runs print the same messages and exit with code 2 if there are errors.
+
+One model change you should know about
+
+To make the speed chart meaningful I steepened the far tail of the second-order clutter spectrum. It now falls as Δf⁻⁵, matching the tail of the wave spectrum, instead of Δf⁻⁴. This raised some ranges at 50 m/s, for example from about 13 km to 30 km at 5 MHz around noon. It is the right physics in direction, but the second-order model is still parametric, so treat its absolute levels with medium-low confidence.
+
+Options for next steps
+Speed against frequency map: plot minimum detectable speed against frequency on one chart, showing the clutter-clear region for each band.
+Full second-order integral (Barrick’s coupling coefficients): this gives the most accurate results near the Bragg region, which matters for slow surface targets. It is the most effort of the three.
+Save and load scenarios (for example as JSON), so the checked input sets can be kept under configuration control for reports.
+
+Add all parameters to saved output CSV files
+
+Ran 2 commands
+
+Now adding a complete parameter metadata table to the model (so no field can be silently dropped), and a structured CSV writer.
+
+Ran 4 commands, shared files
+
+Saved CSV files now record every parameter. Each file opens with a self-describing parameter record (section, parameter, value, unit, description), followed by the chart data as before. It’s in hfswr_tool_v3_1.zip. I checked it both headless and by saving from the GUI on a virtual display: all 41 input fields were present in every case.
+
+What the parameter record contains
+Section	Contents
+Run	Tool version, UTC timestamp, site name and coordinates
+Display	Display mode, the Pd frequency, and the fixed month, UTC hour and SSN used by the charts. These were missing before, so a CSV couldn’t be traced back to its chart.
+Inputs (Radar, Detection, Target, Path, Noise, Sea clutter, Skywave, Speed sweep, Frequencies)	Every input parameter, with its unit and description
+Constants	Sea and land conductivity and permittivity, the ITU-R P.372 man-made noise coefficients and deciles, the galactic noise formula, earth radius, T0
+Derived	Required SINR, range cell, Doppler bin, wave height and wind speed for the sea state, foF2, M(3000)F2, MUF, hmF2, solar zenith angle
+Per frequency	Wavelength, target Doppler, Bragg frequency and speed, first- and second-order sea-echo cross-section, k0h, the noise components and total, skywave weightings, D-layer absorption
+
+The per-frequency block is calculated at the fixed month, hour and SSN, so you can audit why a given line on the chart sits where it does.
+
+Safeguards
+No silent omissions: the parameter list in hfswr_model.py documents every input. The writer refuses to run if a parameter is added to the model without being listed there.
+Excel-friendly encoding: files are saved as UTF-8 with a byte-order mark, so units such as m² display correctly in Excel.
+Options for next steps
+Load a scenario from a saved CSV: read the record back into the GUI to reproduce any run exactly. Low effort, and it makes the record useful for configuration control.
+Separate parameter file: a small JSON or CSV saved next to each PNG, so plots carry the same record.
+Hash of inputs and site data: add a checksum to the record so results can be shown to come from an unmodified tool and dataset for formal reporting.
+
+Add a New control: a new "Atmospheric noise" option offers "ITU-R P.372 tables" or "Parametric (approx.)".
+
+I’ll add a parametric atmospheric-noise model as an alternative to the ITU-R P.372 tables. It’s a closed-form expression whose few coefficients are fitted to the P.372 tables for Land’s End, so its accuracy can be stated. First, the fit:
+
+Ran 10 commands
+
+Refit reproduces the embedded coefficients exactly. Now wiring the option through the parameters, validation, CSV record, GUI and command line:
+
+Ran 7 commands, read a file, shared files
+
+The new Atmospheric noise control is in hfswr_tool_v3_2.zip, on the Path & noise tab (and --atmos tables|parametric for headless runs). It offers ITU-R P.372 tables (the default, unchanged) or Parametric (approx.). The parametric option tracks the tables closely: detection ranges typically agree within ±2 % with Rural man-made noise and ±5 % with Quiet rural.
+
+How the parametric model works
+Form: I used the same structure as P.372. The noise level at 1 MHz is a smooth function of local time and month (a 21-term Fourier series). The noise at each frequency is then a linear function of that level, with cubic coefficients in log frequency. The decile spreads are also smooth functions.
+Coefficients: fitted by weighted least squares to the P.372 tables for Land’s End, over all months and hours from 3 to 30 MHz. The weighting puts most effort where atmospheric noise dominates the total.
+Behaviour: it is smooth through the day, so it doesn’t show the step changes that the tables’ 4-hour time blocks produce. The comparison plot shows this.
+Accuracy against the tables (high confidence; measured at this site)
+Measure	Rural	Quiet rural
+Total median noise, rms error	0.4 dB	1.3 dB
+Total median noise, 95th percentile	1.0 dB	2.8 dB
+Detection range, rms difference	2.3 % (max 9 %)	5.0 % (max 18 %)
+
+Atmospheric noise on its own is only good to about 5 dB rms. The large errors are mostly above 20 MHz, where atmospheric noise is far below man-made and galactic noise and doesn’t affect the result.
+
+Safeguards
+Warnings: you get a warning if the parametric option is used outside 3–30 MHz, or at a site more than 5° of latitude or 10° of longitude from Land’s End. The fit is specific to this site.
+Refitting: fit_parametric_atmos() refits the coefficients for another site. Run against Land’s End, it reproduces the embedded values exactly.
+CSV record: saved files record which atmospheric option was used, and with the parametric option they include all the coefficients and where they came from.
+Plot title: the chart title shows which atmospheric option was used.
+
+I tested both options headless and in the GUI on a virtual display.
+
+Pushback
+
+The parametric option doesn’t remove the dependence on ITU data. It is fitted to the P.372 tables, so it can’t be better than them and is only valid near Land’s End. Its real value is speed and smoothness; the tables are already fast here. I’d keep the tables as the reference for formal results.
+
+Options for next steps
+Generic parametric model: fit across a grid of NW-European sites, adding latitude and longitude terms, so it works without a site file. Moderate effort, and the error would be somewhat larger.
+Measured-noise override: let the user enter measured noise levels for the site, from a survey, as a third option. This is the most realistic for a real deployment.
+Show noise in the chart title: a quick addition so plots state the noise floor they assume.
